@@ -6,15 +6,79 @@ import Redbox from 'redbox-react';
 
 import Presentation from './presentation';
 
+import ApolloClient from 'apollo-boost';
+import { ApolloProvider, useQuery } from '@apollo/react-hooks';
+import { gql } from "apollo-boost";
+
+import { DriverProvider } from "graph-app-kit/components/DriverProvider";
+import neo4j from 'neo4j-driver'
+
+import {flatMap,head} from 'lodash';
+
+// set up Apollo
+
+const client = new ApolloClient({
+  uri: 'http://localhost:11001',
+});
+
+// set up bolt connection
+
+const driver = neo4j.driver(
+  'bolt://localhost:7687',
+  neo4j.auth.basic('neo4j', 'marwhompa'),
+  { disableLosslessIntegers: true }
+)
+
 const CustomErrorReporter = ({ error }) => <Redbox error={error} />;
 
 CustomErrorReporter.propTypes = {
   error: PropTypes.instanceOf(Error).isRequired,
 };
 
+
+const ACTIVE_GRAPH = gql`
+  {
+    workspace {
+      projects {
+        graphs {
+          name
+          status
+          connection {
+            principals {
+              protocols {
+                bolt {
+                  username
+                  password
+                  url
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`
+function GraphAppProvider({children}) {
+  const { loading, error, data } = useQuery(ACTIVE_GRAPH);
+
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p>Error :(</p>;
+
+  const activeGraph = head(flatMap(data.workspace.projects, (p) => p.graphs))
+
+  return (
+    <DriverProvider driver={driver}>
+      {children}
+    </DriverProvider>
+  )
+}
+
 ReactDOM.render(
   <AppContainer errorReporter={CustomErrorReporter}>
-    <Presentation />
+      <ApolloProvider client={client}>
+        <GraphAppProvider><Presentation /></GraphAppProvider>
+      </ApolloProvider>
   </AppContainer>,
   document.getElementById('root')
 );
@@ -24,7 +88,9 @@ if (module.hot) {
     const NextPresentation = require('./presentation').default;
     ReactDOM.render(
       <AppContainer errorReporter={CustomErrorReporter}>
-        <NextPresentation />
+          <ApolloProvider client={client}>
+            <GraphAppProvider><NextPresentation /></GraphAppProvider>
+          </ApolloProvider>
       </AppContainer>,
       document.getElementById('root')
     );
