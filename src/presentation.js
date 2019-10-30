@@ -1,9 +1,9 @@
 // Import React
 import React from 'react';
 
-import {find,some,map,flatMap,head,sortBy} from 'lodash';
+import {find,some,map,flatMap,head,sortBy,groupBy,unionBy,uniqBy,set,merge} from 'lodash';
 
-import * as neo4j from 'neo4j-driver';
+import {types as neo4jTypes } from 'neo4j-driver/lib/v1';
 
 import * as md5 from 'md5-hex'
 
@@ -56,6 +56,57 @@ const formatRecords = records => {
   });
   return out;
 };
+
+const extractGraphFromPath = (path, acc) => {
+  return acc;
+}
+
+const extractGraphElements = (obj, acc) => {
+  const array = Array.isArray(obj) ? obj : [obj];
+  return array.reduce((acc, value) => {
+    if (value instanceof neo4jTypes.Node) acc.push(value)
+    if (value instanceof neo4jTypes.Relationship) acc.push(value)
+    if (value instanceof neo4jTypes.Path) extractGraphFromPath(value, acc);
+
+    // if (value.children) {
+    //   acc = acc.concat(flatten(value.children));
+    //   delete value.children;
+    // }
+    return acc;
+  }, acc);
+}
+
+const extractGraph = (records) => {
+  const paths = records.reduce((acc, record) => {
+    record._fields.forEach(field => extractGraphElements(field, acc))
+    return acc;
+  }, [])
+
+  console.log(paths)
+
+  const graph = groupBy(paths, (v) => {
+    if (v instanceof neo4jTypes.Node) return 'nodes';
+    if (v instanceof neo4jTypes.Relationship) return 'edges';
+  })
+
+  graph.nodes = uniqBy(graph.nodes, 'identity').map(n => merge(n, 
+    {id:n.identity, 
+      "radius": 24,
+      "depth": 1,
+      "color": "rgb(97, 205, 187)"
+    }
+    ))
+  graph.edges = uniqBy(graph.edges, 'identity').map(e => merge(e, 
+    {
+      id:e.identity, source:e.start, target:e.end, 
+      }
+      ))
+
+  console.log(graph)
+
+  // return staticGraph(records)
+  return graph;
+}
 
 const queryResultView = ({ pending, error, result }) => {
   return pending ? (
@@ -148,50 +199,6 @@ const barChart = ({ pending, error, result }) => {
   )
 };
 
-
-const extractGraph = (cypherResult) => {
-
-  return {
-    "nodes": [
-      {
-        "id": "1",
-        "radius": 8,
-        "depth": 1,
-        "color": "rgb(97, 205, 187)"
-      },
-      {
-        "id": "2",
-        "radius": 8,
-        "depth": 1,
-        "color": "rgb(97, 205, 187)"
-      },
-      {
-        "id": "3",
-        "radius": 8,
-        "depth": 1,
-        "color": "rgb(97, 205, 187)"
-      }
-    ],
-    "links": [
-      {
-        "source": "1",
-        "target": "2",
-        "distance": 50
-      },
-      {
-        "source": "2",
-        "target": "3",
-        "distance": 70
-      },
-      {
-        "source": "3",
-        "target": "1",
-        "distance": 70
-      }
-    ]
-  }
-}
-
 const networkChart = ({ pending, error, result }) => {
   if (pending) return (
     <div style={{ height: "60px" }}>pending</div>
@@ -200,18 +207,20 @@ const networkChart = ({ pending, error, result }) => {
     <div style={{ height: "60px", background:"red"}}>{error.message}</div>
   ) 
   
-  const graph = extractGraph(result);
+  const graph = extractGraph(result.records);
 
   return (
-    <Box width='60vw' height='50vh'>
+    <Box width='60vw' height='80vh'>
       <ResponsiveNetwork
         nodes={graph.nodes}
-        links={graph.links}
+        links={graph.edges}
         margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-        repulsivity={6}
-        iterations={60}
+        linkDistance={60}
+        distanceMin={30}
+        repulsivity={480}
+        iterations={180}
         nodeColor={function (e){return e.color}}
-        nodeBorderWidth={1}
+        nodeBorderWidth={4}
         nodeBorderColor={{ from: 'color', modifiers: [ [ 'darker', 0.8 ] ] }}
         linkThickness={function (e){return 2*(2-e.source.depth)}}
         motionStiffness={160}
@@ -401,7 +410,7 @@ export default class Presentation extends React.Component {
           </Heading>
 
           <Cypher
-            query='MATCH p=(actor:Person {name:"Tom Hanks"})-->(:Movie)<-[:ACTED_IN]-(:Person) RETURN p'
+            query='MATCH p=(actor:Person {name:"Tom Hanks"})-->(:Movie)<-[:ACTED_IN]-(:Person) RETURN nodes(p), relationships(p)'
             render={networkChart}
             />
         </Slide>
