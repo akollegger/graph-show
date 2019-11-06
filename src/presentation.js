@@ -1,7 +1,7 @@
 // Import React
-import React from 'react';
+import React, { lazy, Component, Suspense } from 'react';
 
-import {find,some,map,flatMap,head,sortBy} from 'lodash';
+import {find,some,map,flatMap,head,sortBy,concat} from 'lodash';
 
 import * as neo4j from 'neo4j-driver';
 
@@ -32,6 +32,8 @@ import {
   Flex
 } from 'rebass'
 
+import { importMDX } from 'mdx.macro';
+
 // Import theme
 import createTheme from 'spectacle/lib/themes/default';
 
@@ -43,7 +45,12 @@ import { AsciiTable } from "graph-app-kit/components/AsciiTable";
 
 import { ResponsiveBar } from '@nivo/bar'
 import { ResponsiveNetwork } from '@nivo/network'
+import { ResponsiveGeoMap } from '@nivo/geo'
 
+import countries from "./data/geo-countries-id.json";
+import cities from "./data/cities.json";
+
+const MdxContent = lazy(() => importMDX('./mdx/hello.mdx'));
 
 // Require CSS
 require('normalize.css');
@@ -221,6 +228,47 @@ const networkChart = ({ pending, error, result }) => {
     </Box>
 
   )
+}
+
+const featureColorMap = {
+  "Point": {fill:"red", border:"532929"},
+  "Polygon": {fill:"#5f7F3f", border:"475F2f"},
+  "MultiPolygon": {fill:"#5f7F3f", border:"475F2f"}
+}
+const geoFillColor = (e) => {
+  return featureColorMap[e.geometry.type].fill
+}
+
+const geoBorderColor = (e) => {
+  return featureColorMap[e.geometry.type].border
+}
+
+const worldChart = ({ pending, error, result }) => {
+  if (pending) return (
+    <div style={{ height: "60px" }}>pending</div>
+  )
+  if (error) return  (
+    <div style={{ height: "60px", background:"red"}}>{error.message}</div>
+  ) 
+  
+  // const graph = extractGraph(result);
+
+  return (
+    <Box width='64vw' height='60vh'>
+    <ResponsiveGeoMap
+      features={concat(countries, cities.features )}
+      margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+        projectionType="orthographic"
+      projectionScale={500}
+      projectionTranslation={[ 0.5, 0.5 ]}
+      projectionRotation={[ -18.03, -59.2, 0 ]}
+      fillColor={geoFillColor}
+      borderWidth={0.5}
+      borderColor="#333333"
+      enableGraticule={true}
+      graticuleLineColor="#666666"
+    />
+  </Box>)
 }
 
 const WORKSPACE_PROJECTS = gql`
@@ -404,6 +452,24 @@ export default class Presentation extends React.Component {
             query='MATCH p=(actor:Person {name:"Tom Hanks"})-->(:Movie)<-[:ACTED_IN]-(:Person) RETURN p'
             render={networkChart}
             />
+        </Slide>
+
+
+        <Slide transition={['fade']} bgColor="primary" textColor="secondary">
+          <Heading size={6} textColor="secondary" caps>
+            Movie Locations
+          </Heading>
+
+          <Cypher
+            query='MATCH (movies:Movie) RETURN movies'
+            render={worldChart}
+            />
+        </Slide>
+
+        <Slide>
+          <Suspense fallback={<div>Loading...</div>}>
+            <MdxContent />
+          </Suspense>
         </Slide>
       </Deck>
     );
