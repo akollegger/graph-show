@@ -1,7 +1,7 @@
 // Import React
 import React, { lazy, Component, Suspense } from 'react';
 
-import {find,some,map,flatMap,head,sortBy,groupBy,unionBy,uniqBy,set,merge} from 'lodash';
+import {concat,find,some,map,flatMap,head,sortBy,groupBy,unionBy,uniqBy,set,merge} from 'lodash';
 
 import {types as neo4jTypes } from 'neo4j-driver/lib/v1';
 

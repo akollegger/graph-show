@@ -17,10 +17,21 @@ import neo4j from 'neo4j-driver'
 
 import {flatMap,head} from 'lodash';
 
-// set up Apollo
+const url = new URL(window.location.href);
+const apiEndpoint = url.searchParams.get('neo4jDesktopApiUrl');
+const apiClientId = url.searchParams.get('neo4jDesktopGraphAppClientId');
 
 const client = new ApolloClient({
-  uri: 'http://localhost:11001',
+  uri: apiEndpoint || 'http://localhost:11001',
+  request: (operation) => {
+    const token = localStorage.getItem('token')
+    operation.setContext({
+      headers: {
+        'ClientId': apiClientId
+      }
+    })
+  }
+
 });
 
 // set up bolt connection
